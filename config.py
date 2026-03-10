@@ -8,7 +8,7 @@ CHROME_DEBUG_URL = f"http://localhost:{CHROME_DEBUG_PORT}"
 POLYMARKET_PORTFOLIO_URL = "https://polymarket.com/portfolio"
 
 # Timing (seconds)
-SCAN_INTERVAL = 240
+SCAN_INTERVAL = 120
 PAGE_LOAD_WAIT = 3
 POPUP_WAIT = 3
 POST_CLAIM_WAIT = 2
