@@ -1,0 +1,18 @@
+# Secrets — accounts & harvested keys (NEVER commit)
+helius_accounts.txt
+helius_keys.json
+helius_keys.txt
+helius_api_keys_only.txt
+helius_keys*.txt
+*_accounts.txt
+
+# Logs
+*.log
+
+# Chrome profiles / browser data
+chrome_bot_profile/
+ChromeDebug/
+
+# Python
+__pycache__/
+*.pyc
