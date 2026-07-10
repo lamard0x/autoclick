@@ -10,7 +10,7 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
-CONCURRENCY = 5  # number of parallel tabs
+CONCURRENCY = 10  # number of parallel tabs
 ACCOUNT_TYPE = "Personal"  # Helius onboarding "Personal or Developer" step — which option to pick
 
 # Connect to the running "Lam - Chrome (Bot)" instance instead of launching a
