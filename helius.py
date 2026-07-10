@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 CONCURRENCY = 5  # number of parallel tabs
+ACCOUNT_TYPE = "Personal"  # Helius onboarding "Personal or Developer" step — which option to pick
 
 # Connect to the running "Lam - Chrome (Bot)" instance instead of launching a
 # fresh Chromium. Start it first via the desktop shortcut, which runs:
@@ -25,6 +26,13 @@ LOG_FILE = Path(r"C:\Users\ASUS\Documents\Claude Work\autoclick\helius.log")
 
 HELIUS_SIGNUP_URL = "https://dashboard.helius.dev/signup"
 HELIUS_API_KEYS_URL = "https://dashboard.helius.dev/api-keys"
+
+# Windows console defaults to cp1252 → force utf-8 so unicode (→, emoji) in
+# log messages doesn't raise UnicodeEncodeError on the stdout StreamHandler.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
 
 logging.basicConfig(
     level=logging.INFO,
@@ -240,6 +248,32 @@ async def signup_one(browser, email: str, password: str) -> str:
                 await human_delay(1.5, 3)
                 continue
 
+            # 6a2. "Personal or Developer" account-type step → pick ACCOUNT_TYPE.
+            # Checked AFTER 6a so the plan page (which may list a "Developer" tier)
+            # is handled first and never reaches this branch.
+            type_order = [ACCOUNT_TYPE, "Developer" if ACCOUNT_TYPE == "Personal" else "Personal"]
+            picked_type = None
+            for label in type_order:
+                opt = page.get_by_text(label, exact=False)
+                if await opt.count() > 0:
+                    try:
+                        await opt.first.click()
+                        picked_type = label
+                        await human_delay(0.4, 0.9)
+                        break
+                    except Exception:
+                        continue
+            if picked_type:
+                log.info(f"Account type: picked {picked_type}")
+                nxt = page.locator('button:has-text("Continue"), button:has-text("Next"), button:has-text("Get started")')
+                if await nxt.count() > 0:
+                    try:
+                        await nxt.first.click()
+                    except Exception:
+                        pass
+                await human_delay(1.5, 3)
+                continue
+
             # 6b. "What are you building?" → pick a category then Continue
             if await page.get_by_text("What are you building", exact=False).count() > 0:
                 for cat in ("Infrastructure", "AI agents", "DeFi & trading", "Something else"):
@@ -273,6 +307,19 @@ async def signup_one(browser, email: str, password: str) -> str:
                     await human_delay(1.5, 3)
                 continue
 
+            # 6c2. "/setup" contact-channel screen → skip Slack integration.
+            # This screen's buttons ARE the choices (no "Continue"), so 6d
+            # generic misses it. Pick "Just email for now" to reach the dashboard.
+            email_only = page.get_by_text("Just email for now", exact=False)
+            if await email_only.count() > 0:
+                try:
+                    await email_only.first.click()
+                    log.info("Setup: Just email for now (skip Slack)")
+                    await human_delay(1.5, 3)
+                    continue
+                except Exception:
+                    pass
+
             # Fallback: legacy onboarding buttons
             legacy = page.locator('button:has-text("Create free project"), button:has-text("Get Started")')
             if await legacy.count() > 0:
@@ -280,6 +327,33 @@ async def signup_one(browser, email: str, password: str) -> str:
                 log.info("Legacy onboarding button")
                 await human_delay(2, 4)
                 continue
+
+            # 6d. Generic pass-through for any UNRECOGNIZED multi-choice step
+            # (covers "Personal or Developer" and future onboarding screens even if
+            # exact text differs): pick the first selectable option, then Continue.
+            nxt = page.locator(
+                'button:has-text("Continue"), button:has-text("Next"), '
+                'button:has-text("Get started"), button:has-text("Finish")'
+            )
+            if await nxt.count() > 0:
+                choice = page.locator(
+                    '[role="radio"], [role="option"], label:has(input[type="radio"]), '
+                    'div[class*="card" i], button[class*="card" i], '
+                    'div[class*="option" i], [data-testid*="option" i]'
+                ).first
+                try:
+                    if await choice.count() > 0:
+                        await choice.click(timeout=2000)
+                        await human_delay(0.3, 0.7)
+                except Exception:
+                    pass
+                try:
+                    await nxt.first.click()
+                    log.info("Generic onboarding step → picked option + Continue")
+                    await human_delay(1.5, 3)
+                    continue
+                except Exception:
+                    pass
 
         # Wait for any project creation redirect to settle
         for _ in range(15):
@@ -394,6 +468,20 @@ async def extract_api_key(page) -> str:
             if m not in url:
                 log.info(f"Key UUID: {m[:16]}...")
                 return m
+    except Exception:
+        pass
+
+    # Diagnostics: capture where the flow stalled so onboarding gaps can be fixed.
+    try:
+        dbg = Path(r"C:\Users\ASUS\Documents\Claude Work\autoclick\debug")
+        dbg.mkdir(exist_ok=True)
+        stamp = datetime.now().strftime("%H%M%S_%f")
+        await page.screenshot(path=str(dbg / f"stuck_{stamp}.png"))
+        btns = await page.evaluate(
+            "[...document.querySelectorAll('button,[role=button],a')]"
+            ".map(b => (b.textContent||'').trim()).filter(t => t && t.length < 40).slice(0, 30)"
+        )
+        log.warning(f"STUCK at {page.url[:70]} | clickables: {btns}")
     except Exception:
         pass
 

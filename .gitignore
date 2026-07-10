@@ -13,6 +13,9 @@ helius_keys*.txt
 chrome_bot_profile/
 ChromeDebug/
 
+# Diagnostics — onboarding stuck screenshots (may leak account/UI)
+debug/
+
 # Python
 __pycache__/
 *.pyc
